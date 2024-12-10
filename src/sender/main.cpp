@@ -1,73 +1,62 @@
-#include <SPI.h>
-#include <mcp_canbus.h>
+#include <ESP32-TWAI-CAN.hpp>
 
-#define SPI_CS_PIN  D7
-MCP_CAN CAN(SPI_CS_PIN); // Set CS pin
+#define CAN_TX D8
+#define CAN_RX D7
 
-// Define MotorData structure
-struct MotorData {
-    bool directionPinInverted = false;
-    long speed = 0;
-    long maxspeed = 200000;
-    long acceleration = 0;
-    long targetPosition = 0;
-    long currentPosition = 0;
-    int isforever = false;
-    bool isaccelerated = false;
-    bool absolutePosition = false;
-    bool isEnable = true;
-    int qid = -1;
-    bool isStop = false;
-    bool isActivated = 0;
-    bool stopped = true;
-    bool endstop_hit = false;
-    bool isTriggered = false;
-    long offsetTrigger = 0;
-    long triggerPeriod = -1;
-    int triggerPin = -1;
-    int dirPin = -1;
-    int stpPin = -1;
-} __attribute__((packed));
+struct MotorDataLarge {
+    uint8_t flags;
+    int16_t speed;
+    int32_t targetPosition;
+    int32_t currentPosition;
+    uint32_t timestamp;
+    uint8_t checksum;
+};
 
-MotorData motorData;
+MotorDataLarge motorData = {0x01, 1200, 50000, 10000, 0, 0xAA};
+MotorDataLarge storedData;
+
+void sendSegmentedData(uint16_t msgID, void* data, size_t dataSize) {
+    const uint8_t chunkSize = 8;
+    uint8_t* dataPtr = (uint8_t*)data;
+
+    for (uint8_t i = 0; i < (dataSize + chunkSize - 1) / chunkSize; i++) {
+        CanFrame frame;
+        frame.identifier = msgID;
+        frame.extd = 0;
+        frame.data_length_code = chunkSize;
+
+        frame.data[0] = i;                      
+        frame.data[1] = (i == 0) ? 1 : 0;       
+        frame.data[2] = (i == (dataSize / chunkSize)) ? 1 : 0; 
+
+        memcpy(&frame.data[3], dataPtr + (i * chunkSize), chunkSize - 3);
+
+        if (!ESP32Can.writeFrame(&frame)) {
+            Serial.printf("Chunk %d send failed\n", i);
+        }
+    }
+}
 
 void setup() {
     Serial.begin(115200);
-    while (!Serial);
+    ESP32Can.setPins(CAN_TX, CAN_RX);
+    ESP32Can.begin(ESP32Can.convertSpeed(500));
 
-    while (CAN_OK != CAN.begin(CAN_500KBPS)) { // Initialize CAN at 500 kbps
-        Serial.println("CAN BUS FAIL!");
-        delay(100);
-    }
-    Serial.println("CAN BUS OK!");
+    motorData.timestamp = millis();
 }
 
 void loop() {
-    // Populate MotorData structure with sample data
-    motorData.speed = 1000;
-    motorData.targetPosition = 5000;
-
-    // Serialize structure to a byte array
-    const int dataSize = sizeof(MotorData);
-    uint8_t buffer[dataSize];
-    memcpy(buffer, &motorData, dataSize);
-
-    // Send data in 8-byte chunks
-    for (int i = 0; i < dataSize; i += 8) {
-        uint8_t frameData[8] = {0}; // 8-byte buffer for CAN frame
-        int chunkSize = min(8, dataSize - i);
-        memcpy(frameData, buffer + i, chunkSize);
-
-        // Send CAN frame with ID 0x01
-        if (CAN.sendMsgBuf(0x01, 0, 8, frameData) == CAN_OK) {
-            Serial.print("Sent chunk ");
-            Serial.println(i / 8);
-        } else {
-            Serial.println("CAN send failed!");
+    CanFrame frame;
+    if (ESP32Can.readFrame(&frame)) {
+        if (frame.identifier == 0x300) {  // Request for updated MotorData
+            Serial.println("MotorData Request Received");
+            sendSegmentedData(0x301, &motorData, sizeof(motorData));
+        } 
+        else if (frame.identifier == 0x302) {  // Modified MotorData received
+            memcpy(&storedData, &frame.data[3], sizeof(MotorDataLarge));
+            Serial.println("Modified MotorData Received:");
+            Serial.printf("Flags: %d, Speed: %d, TargetPosition: %ld, CurrentPosition: %ld, Timestamp: %lu\n",
+                          storedData.flags, storedData.speed, storedData.targetPosition, storedData.currentPosition, storedData.timestamp);
         }
-        delay(10); // Small delay between frames
     }
-
-    Serial.println("MotorData sent!");
-    delay(1000); // Send every second
 }
