@@ -1,124 +1,79 @@
-#include <ESP32-TWAI-CAN.hpp>
+#include <Arduino.h>
+#include "iso-tp-twai/CanIsoTp.hpp"
 
 #ifdef XIAO
-#define CAN_TX D8
-#define CAN_RX D7
+uint8_t pinTX = D8;
+uint8_t pinRX = D7;
 #else
-#define CAN_TX GPIO_NUM_13
-#define CAN_RX GPIO_NUM_12
+uint8_t pinTX = GPIO_NUM_13;
+uint8_t pinRX = GPIO_NUM_12;
 #endif
+typedef struct {
+    uint32_t counter;
+    uint32_t counter1;
+    uint32_t counter2;
+    uint32_t counter3;
+    uint32_t counter4;
+    uint32_t counter5;
+    uint32_t counter6;
+    uint32_t counter7;
+    uint32_t counter8;
+    uint32_t counter9;
+    uint32_t counter10;
+    uint32_t counter11;
+} MessageData;
 
-struct MotorDataLarge
-{
-    uint8_t flags;
-    int16_t speed;
-    int32_t targetPosition;
-    int32_t currentPosition;
-    uint32_t timestamp;
-    uint8_t checksum;
-};
+CanIsoTp isoTpReceiver;
+MessageData rxData, txData;
+pdu_t rxPdu, txPdu;
 
-MotorDataLarge motorData;
-uint8_t reassemblyBuffer[32];
-uint8_t chunkCount = 0;
-
-void sendModifiedData()
-{
-    const uint8_t chunkSize = 8;
-    uint8_t *dataPtr = (uint8_t *)&motorData;
-
-    for (uint8_t i = 0; i < (sizeof(motorData) + chunkSize - 1) / chunkSize; i++)
-    {
-        CanFrame frame;
-        frame.identifier = 0x302;
-        frame.extd = 0;
-        frame.data_length_code = chunkSize;
-
-        frame.data[0] = i;
-        frame.data[1] = (i == 0) ? 1 : 0;
-        frame.data[2] = (i == (sizeof(motorData) / chunkSize)) ? 1 : 0;
-
-        memcpy(&frame.data[3], dataPtr + (i * chunkSize), chunkSize - 3);
-
-        if (!ESP32Can.writeFrame(&frame))
-        {
-            Serial.printf("Chunk %d send failed\n", i);
-        }
-    }
-}
-
-void receiveSegmentedData(CanFrame *frame)
-{
-    uint8_t chunkNum = frame->data[0];
-    bool isStartFrame = frame->data[1];
-    bool isEndFrame = frame->data[2];
-
-    memcpy(reassemblyBuffer + (chunkNum * 5), &frame->data[3], 5);
-
-    if (isStartFrame)
-    {
-        chunkCount = 0; // Reset reassembly
-    }
-
-    chunkCount++;
-
-    if (isEndFrame)
-    {
-        memcpy(&motorData, reassemblyBuffer, sizeof(motorData));
-        Serial.println("MotorData Reassembled:");
-        Serial.printf("Flags: %d, Speed: %d, TargetPosition: %ld, CurrentPosition: %ld, Timestamp: %lu\n",
-                      motorData.flags, motorData.speed, motorData.targetPosition, motorData.currentPosition, motorData.timestamp);
-
-        // Modify motor data values
-        motorData.speed += 100;
-        motorData.targetPosition += 1000;
-        motorData.currentPosition += 500;
-        motorData.timestamp = millis();
-
-        sendModifiedData();
-    }
-}
-
-void requestMotorData()
-{
-    CanFrame frame;
-    frame.identifier = 0x300; // Request ID
-    frame.extd = 0;
-    frame.data_length_code = 1;
-    frame.data[0] = 0x01;
-
-    if (ESP32Can.writeFrame(&frame))
-    {
-        Serial.println("MotorData Request Sent");
-    }
-    else
-    {
-        Serial.println("MotorData Request Failed");
-    }
-}
-
-void setup()
-{
+void setup() {
     Serial.begin(115200);
-    ESP32Can.setPins(CAN_TX, CAN_RX);
-    ESP32Can.begin(ESP32Can.convertSpeed(500));
+    if (!isoTpReceiver.begin(500, pinTX, pinRX)) {
+        Serial.println("Failed to start TWAI");
+        while (1);
+    }
+
+    // Setup Rx PDU for incoming data
+    rxPdu.rxId = 0x123; 
+    rxPdu.txId = 0x456;
+    rxPdu.data = (uint8_t*)&rxData;
+    rxPdu.len = sizeof(rxData);
+    rxPdu.cantpState = CANTP_IDLE;  // Start in idle state
+    rxPdu.blockSize = 0;
+    rxPdu.separationTimeMin = 0;
+
+    // Setup Tx PDU for responses
+    txPdu.txId = 0x456;
+    txPdu.rxId = 0x123;
+    txPdu.data = (uint8_t*)&txData;
+    txPdu.len = sizeof(txData);
+    txPdu.cantpState = CANTP_IDLE;
+    txPdu.blockSize = 0;
+    txPdu.separationTimeMin = 5;
+
+    Serial.println("Receiver ready.");
 }
 
-void loop()
-{
-    static uint32_t lastRequest = 0;
-    if (millis() - lastRequest > 2000)
-    {
-        lastRequest = millis();
-        requestMotorData();
-    }
+void loop() {
+    // Try to receive incoming data
+    int result = isoTpReceiver.receive(&rxPdu);
+    if (result == 0 && rxPdu.cantpState == CANTP_END) {
+        Serial.print("Receiver: Received counter = ");
+        Serial.println(rxData.counter);
 
-    CanFrame frame;
-    if (ESP32Can.readFrame(&frame))
-    {
-        if (frame.identifier == 0x301)
-        { // Incoming MotorData
-            receiveSegmentedData(&frame);
+        // Prepare response
+        txData.counter = rxData.counter + 100; // Just an example modification
+        txPdu.data = (uint8_t*)&txData;
+        txPdu.len = sizeof(txData);
+
+        // Send response
+        if (isoTpReceiver.send(&txPdu) == 0) {
+            Serial.print("Receiver: Sent response counter = ");
+            Serial.println(txData.counter);
+        } else {
+            Serial.println("Receiver: Error sending response");
         }
     }
+    delay(10);
 }

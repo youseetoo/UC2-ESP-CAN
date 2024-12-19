@@ -1,62 +1,87 @@
-#include <ESP32-TWAI-CAN.hpp>
+#include <Arduino.h>
+#include "iso-tp-twai/CanIsoTp.hpp"
 
-#define CAN_TX D8
-#define CAN_RX D7
 
-struct MotorDataLarge {
-    uint8_t flags;
-    int16_t speed;
-    int32_t targetPosition;
-    int32_t currentPosition;
-    uint32_t timestamp;
-    uint8_t checksum;
-};
+#ifdef XIAO
+uint8_t pinTX = D8;
+uint8_t pinRX = D7;
+#else
+uint8_t pinTX = GPIO_NUM_13;
+uint8_t pinRX = GPIO_NUM_12;
+#endif
 
-MotorDataLarge motorData = {0x01, 1200, 50000, 10000, 0, 0xAA};
-MotorDataLarge storedData;
+typedef struct {
+    uint32_t counter;
+    uint32_t counter1;
+    uint32_t counter2;
+    uint32_t counter3;
+    uint32_t counter4;
+    uint32_t counter5;
+    uint32_t counter6;
+    uint32_t counter7;
+    uint32_t counter8;
+    uint32_t counter9;
+    uint32_t counter10;
+    uint32_t counter11;
 
-void sendSegmentedData(uint16_t msgID, void* data, size_t dataSize) {
-    const uint8_t chunkSize = 8;
-    uint8_t* dataPtr = (uint8_t*)data;
+} MessageData;
 
-    for (uint8_t i = 0; i < (dataSize + chunkSize - 1) / chunkSize; i++) {
-        CanFrame frame;
-        frame.identifier = msgID;
-        frame.extd = 0;
-        frame.data_length_code = chunkSize;
+CanIsoTp isoTpSender;
+MessageData txData, rxData;
+pdu_t txPdu, rxPdu;
 
-        frame.data[0] = i;                      
-        frame.data[1] = (i == 0) ? 1 : 0;       
-        frame.data[2] = (i == (dataSize / chunkSize)) ? 1 : 0; 
-
-        memcpy(&frame.data[3], dataPtr + (i * chunkSize), chunkSize - 3);
-
-        if (!ESP32Can.writeFrame(&frame)) {
-            Serial.printf("Chunk %d send failed\n", i);
-        }
-    }
-}
+unsigned long lastSend = 0;
 
 void setup() {
     Serial.begin(115200);
-    ESP32Can.setPins(CAN_TX, CAN_RX);
-    ESP32Can.begin(ESP32Can.convertSpeed(500));
+    if (!isoTpSender.begin(500, pinTX, pinRX)) {
+        Serial.println("Failed to start TWAI");
+        while (1);
+    }
 
-    motorData.timestamp = millis();
+    // Initialize data
+    txData.counter = 0;
+
+    // Setup Tx PDU
+    txPdu.txId = 0x123;  
+    txPdu.rxId = 0x456;
+    txPdu.data = (uint8_t*)&txData;
+    txPdu.len = sizeof(txData);
+    txPdu.cantpState = CANTP_IDLE;
+    txPdu.blockSize = 0;        
+    txPdu.separationTimeMin = 5;
+
+    // Setup Rx PDU for responses
+    rxPdu.txId = 0x456;
+    rxPdu.rxId = 0x123;
+    rxPdu.data = (uint8_t*)&rxData;
+    rxPdu.len = sizeof(rxData);
+    rxPdu.cantpState = CANTP_IDLE;
+    rxPdu.blockSize = 0;
+    rxPdu.separationTimeMin = 0;
 }
 
 void loop() {
-    CanFrame frame;
-    if (ESP32Can.readFrame(&frame)) {
-        if (frame.identifier == 0x300) {  // Request for updated MotorData
-            Serial.println("MotorData Request Received");
-            sendSegmentedData(0x301, &motorData, sizeof(motorData));
-        } 
-        else if (frame.identifier == 0x302) {  // Modified MotorData received
-            memcpy(&storedData, &frame.data[3], sizeof(MotorDataLarge));
-            Serial.println("Modified MotorData Received:");
-            Serial.printf("Flags: %d, Speed: %d, TargetPosition: %ld, CurrentPosition: %ld, Timestamp: %lu\n",
-                          storedData.flags, storedData.speed, storedData.targetPosition, storedData.currentPosition, storedData.timestamp);
+    // Send a message every 1 second
+    if (millis() - lastSend >= 1000) {
+        lastSend = millis();
+        txData.counter++;
+        txPdu.data = (uint8_t*)&txData;
+        txPdu.len = sizeof(txData);
+        if (isoTpSender.send(&txPdu) == 0) {
+            Serial.print("Sender: Sent counter = ");
+            Serial.println(txData.counter);
+        } else {
+            Serial.println("Sender: Error sending");
+        }
+
+        // Attempt to receive response
+        int result = isoTpSender.receive(&rxPdu);
+        if (result == 0 && rxPdu.cantpState == CANTP_IDLE) {
+            Serial.print("Sender: Received response counter = ");
+            Serial.println(rxData.counter);
+        } else {
+            Serial.println("Sender: No response or error");
         }
     }
 }
