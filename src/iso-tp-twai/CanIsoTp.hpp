@@ -73,7 +73,7 @@ private:
     uint32_t _timerCFWait;
     uint8_t _rxPacketData[PACKET_SIZE];
     uint8_t _rxRestBytes;
-    uint8_t _receivedFCWaits;
+    uint8_t _receivedFCWaits = 0; // Reset this when starting a new transmission
 
     int send_SingleFrame(pdu_t *pdu);
     int send_FirstFrame(pdu_t *pdu);

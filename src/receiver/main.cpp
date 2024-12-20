@@ -50,7 +50,7 @@ void setup() {
     txPdu.len = sizeof(txData);
     txPdu.cantpState = CANTP_IDLE;
     txPdu.blockSize = 0;
-    txPdu.separationTimeMin = 5;
+    txPdu.separationTimeMin = 1;
 
     Serial.println("Receiver ready.");
 }
