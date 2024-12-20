@@ -12,7 +12,7 @@
 
 #define PACKET_SIZE 8
 #define TIMEOUT_SESSION 100
-#define TIMEOUT_FC 50
+#define TIMEOUT_FC 100
 #define TIMEOUT_READ 100
 
 // Already declared in ESP32-TWAI-CAN.hpp
@@ -86,7 +86,7 @@ int CanIsoTp::send(pdu_t *pdu)
             {
                 pdu->cantpState = CANTP_IDLE;
                 ret = 1; // Timeout
-                log_i("Timeout waiting for FC");
+                log_i("Timeout waiting for First FC");
             }
             break;
 
