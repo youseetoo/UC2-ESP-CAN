@@ -22,7 +22,7 @@ typedef struct {
     uint32_t rxId;      // Receive CAN ID
     uint8_t *data;      // Pointer to data buffer
     uint16_t len;       // Data length
-    uint8_t seqId;      // Sequence ID for consecutive frames
+    uint8_t seqId;      // Sequence ID for consecutive frames, meaning the number of the frame in the sequence
     uint8_t fcStatus;   // Flow control status
     uint8_t blockSize;  // Block size for flow control
     uint8_t separationTimeMin; // Minimum separation time
@@ -270,6 +270,10 @@ int CanIsoTp::receive(pdu_t *rxpdu)
                     }
                 }
             }
+            else
+            {
+                log_i("Frame ID mismatch");
+            }
         }
         else
         {
@@ -317,7 +321,6 @@ int CanIsoTp::send_FirstFrame(pdu_t *pdu)
 
 int CanIsoTp::send_ConsecutiveFrame(pdu_t *pdu)
 {
-    log_i("Sending CF");
     CanFrame frame = {0};
     frame.identifier = pdu->txId;
     frame.extd = 0;
@@ -325,6 +328,7 @@ int CanIsoTp::send_ConsecutiveFrame(pdu_t *pdu)
 
     frame.data[0] = N_PCItypeCF | (pdu->seqId & 0x0F); // PCI: Consecutive Frame with sequence number
     uint8_t sizeToSend = (pdu->len > 7) ? 7 : pdu->len;
+    log_i("Sending CF, len: %d, seqID: %d", sizeToSend, frame.data[0] & 0x0F);  
 
     memcpy(&frame.data[1], pdu->data, sizeToSend);
     pdu->data += sizeToSend;
@@ -372,7 +376,6 @@ int CanIsoTp::receive_FirstFrame(pdu_t *pdu, CanFrame *frame)
 
 int CanIsoTp::receive_ConsecutiveFrame(pdu_t *pdu, CanFrame *frame)
 {
-    log_i("Consecutive Frame received, state: %d and seqID %d", pdu->cantpState, pdu->seqId);
     // Update the time difference and reset _timerCFWait (as in original)
     uint32_t timeDiff = millis() - _timerCFWait;
     _timerCFWait = millis();
@@ -383,8 +386,11 @@ int CanIsoTp::receive_ConsecutiveFrame(pdu_t *pdu, CanFrame *frame)
 
     // Check sequence number to ensure correct order
     uint8_t seqId = frame->data[0] & 0x0F;
-    if (seqId != pdu->seqId)
+    log_i("Consecutive Frame received, state: %d and seqID (pdu) %d, seqID incoming: %d", pdu->cantpState, pdu->seqId, seqId);
+    if (seqId != pdu->seqId){
+        log_i("Sequence mismatch");
         return 1; // Sequence mismatch
+    }
 
     // Determine how many bytes to copy
     uint8_t sizeToCopy = (_rxRestBytes > 7) ? 7 : _rxRestBytes;
@@ -392,6 +398,7 @@ int CanIsoTp::receive_ConsecutiveFrame(pdu_t *pdu, CanFrame *frame)
 
     // Decrease the remaining bytes count
     _rxRestBytes -= sizeToCopy;
+    log_i("Rest bytes: %d", _rxRestBytes);
 
     // If we've received all data, update state to CANTP_END
     if (_rxRestBytes <= 0)

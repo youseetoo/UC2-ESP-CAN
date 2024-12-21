@@ -35,8 +35,8 @@ void setup() {
     }
 
     // Setup Rx PDU for incoming data
-    rxPdu.rxId = 0x123; 
     rxPdu.txId = 0x456;
+    rxPdu.rxId = 0x123; 
     rxPdu.data = (uint8_t*)&rxData;
     rxPdu.len = sizeof(rxData);
     rxPdu.cantpState = CANTP_IDLE;  // Start in idle state
@@ -44,8 +44,8 @@ void setup() {
     rxPdu.separationTimeMin = 0;
 
     // Setup Tx PDU for responses
-    txPdu.txId = 0x456;
-    txPdu.rxId = 0x123;
+    txPdu.rxId = 0x456;
+    txPdu.txId = 0x123;
     txPdu.data = (uint8_t*)&txData;
     txPdu.len = sizeof(txData);
     txPdu.cantpState = CANTP_IDLE;
@@ -62,6 +62,7 @@ void loop() {
         Serial.print("Receiver: Received counter = ");
         Serial.println(rxData.counter);
 
+        delay(100);
         // Prepare response
         txData.counter = rxData.counter + 100; // Just an example modification
         txPdu.data = (uint8_t*)&txData;
@@ -75,5 +76,4 @@ void loop() {
             Serial.println("Receiver: Error sending response");
         }
     }
-    delay(10);
 }

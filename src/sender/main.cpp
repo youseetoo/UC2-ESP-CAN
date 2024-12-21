@@ -76,12 +76,20 @@ void loop() {
         }
 
         // Attempt to receive response
-        int result = isoTpSender.receive(&rxPdu);
-        if (result == 0 && rxPdu.cantpState == CANTP_IDLE) {
-            Serial.print("Sender: Received response counter = ");
-            Serial.println(rxData.counter);
-        } else {
-            Serial.println("Sender: No response or error");
-        }
+        int mCounter = 0;
+        while(true){
+            int result = isoTpSender.receive(&rxPdu);
+            if (result == 0 && rxPdu.cantpState == CANTP_END) {
+                Serial.print("Sender: Received response counter = ");
+                Serial.println(rxData.counter);
+                break;
+            } else {
+                Serial.print("Sender: No response or error");
+                Serial.println(mCounter);
+            }
+            mCounter += 1;
+            if (mCounter > 10) break;
+        } 
+
     }
 }
