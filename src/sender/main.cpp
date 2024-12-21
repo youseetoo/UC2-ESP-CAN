@@ -63,7 +63,7 @@ void setup() {
 
 void loop() {
     // Send a message every 1 second
-    if (millis() - lastSend >= 1000) {
+    if (millis() - lastSend >= 1) {
         lastSend = millis();
         txData.counter++;
         txPdu.data = (uint8_t*)&txData;
