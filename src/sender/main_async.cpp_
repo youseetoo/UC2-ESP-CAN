@@ -1,0 +1,145 @@
+#include <Arduino.h>
+#include "iso-tp-twai/CanIsoTp.hpp"
+
+#ifdef XIAO
+uint8_t pinTX = D8;
+uint8_t pinRX = D7;
+#else
+uint8_t pinTX = GPIO_NUM_13;
+uint8_t pinRX = GPIO_NUM_12;
+#endif
+
+
+bool lock = false;
+typedef struct {
+    uint32_t counter;
+    uint32_t counter1;
+    uint32_t counter2;
+    uint32_t counter3;
+    uint32_t counter4;
+    uint32_t counter5;
+    uint32_t counter6;
+    uint32_t counter7;
+    uint32_t counter8;
+    uint32_t counter9;
+    uint32_t counter10;
+    uint32_t counter11;
+} MessageData;
+
+CanIsoTp isoTpSender;
+MessageData txData, rxData;   // Global data for demonstration
+pdu_t txPdu, rxPdu;          // Global PDUs
+
+static QueueHandle_t g_rxQueue;  // Queue to store received messages
+
+unsigned long lastSend = 0;
+
+/********************************************************************/
+// Task that constantly polls the bus for incoming ISO-TP messages
+void isoTpReceiveTask(void *pvParameters)
+{
+    (void) pvParameters;  // unused
+    for (;;)
+    {
+        if (lock) {
+            continue;
+        }
+        // Try receiving a message
+        int result = isoTpSender.receive(&rxPdu);
+        // If successful and end of message
+        if (result == 0 && rxPdu.cantpState == CANTP_END)
+        {
+            // We have a complete message in rxData
+            // Send a copy of rxData into the queue
+            // (Because we store the data directly into rxData in your code)
+            xQueueSend(g_rxQueue, &rxData, 0);
+            
+            // Reset state for next message
+            rxPdu.cantpState = CANTP_IDLE; 
+        }
+        // Minimal delay to avoid spinning too hard
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+}
+
+/********************************************************************/
+void setup() {
+    Serial.begin(115200);
+    // Initialize CAN
+    if (!isoTpSender.begin(500, pinTX, pinRX)) {
+        Serial.println("Failed to start TWAI");
+        while (1);
+    }
+
+    // Create a queue to hold up to 10 MessageData items
+    g_rxQueue = xQueueCreate(10, sizeof(MessageData));
+    if (g_rxQueue == NULL) {
+        Serial.println("Error creating queue");
+        while(1);
+    }
+
+    // Create the ISO-TP receive task
+    xTaskCreatePinnedToCore(
+        isoTpReceiveTask,   // Task function
+        "IsoTpReceiveTask", // Name
+        4096,               // Stack size
+        NULL,               // Parameter
+        1,                  // Priority
+        NULL,               // Task handle
+        1                   // Run on core 1 (ESP32)
+    );
+
+    // Initialize data
+    memset(&txData, 0, sizeof(txData));
+    memset(&rxData, 0, sizeof(rxData));
+
+    // Setup Tx PDU
+    txPdu.txId = 0x123;  
+    txPdu.rxId = 0x456;
+    txPdu.data = (uint8_t*)&txData;
+    txPdu.len = sizeof(txData);
+    txPdu.cantpState = CANTP_IDLE;
+    txPdu.blockSize = 0;        
+    txPdu.separationTimeMin = 5;
+
+    // Setup Rx PDU for responses
+    rxPdu.txId = 0x456;
+    rxPdu.rxId = 0x123;
+    rxPdu.data = (uint8_t*)&rxData;
+    rxPdu.len = sizeof(rxData);
+    rxPdu.cantpState = CANTP_IDLE;
+    rxPdu.blockSize = 0;
+    rxPdu.separationTimeMin = 0;
+}
+
+void sendSingleFrame() {
+    // Send a single frame
+    txData.counter++;
+    txPdu.data = (uint8_t*)&txData;
+    txPdu.len = sizeof(txData);
+    if (isoTpSender.send(&txPdu) == 0) {
+        Serial.print("Sender: Sent counter = ");
+        Serial.println(txData.counter);
+    } else {
+        Serial.println("Sender: Error sending");
+    }
+}
+
+void loop() {
+    // Send a message periodically (every 1 second for example)
+    if (millis() - lastSend >= 100) {
+        lock = true;
+        lastSend = millis();
+        sendSingleFrame();
+        lock = false;
+    }
+    delay(10);
+    // Check if we received a new message from the queue
+    MessageData incomingData;
+    if (xQueueReceive(g_rxQueue, &incomingData, 0) == pdTRUE)
+    {
+        // We have a new message
+        Serial.print("Received from queue, counter = ");
+        Serial.println(incomingData.counter);
+    }
+}

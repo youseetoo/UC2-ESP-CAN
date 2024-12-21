@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include "iso-tp-twai/CanIsoTp.hpp"
 
-
 #ifdef XIAO
 uint8_t pinTX = D8;
 uint8_t pinRX = D7;
@@ -10,7 +9,8 @@ uint8_t pinTX = GPIO_NUM_13;
 uint8_t pinRX = GPIO_NUM_12;
 #endif
 
-typedef struct {
+typedef struct
+{
     uint32_t counter;
     uint32_t counter1;
     uint32_t counter2;
@@ -32,64 +32,89 @@ pdu_t txPdu, rxPdu;
 
 unsigned long lastSend = 0;
 
-void setup() {
+void setup()
+{
     Serial.begin(115200);
-    if (!isoTpSender.begin(500, pinTX, pinRX)) {
+    if (!isoTpSender.begin(500, pinTX, pinRX))
+    {
         Serial.println("Failed to start TWAI");
-        while (1);
+        while (1)
+            ;
     }
 
     // Initialize data
     txData.counter = 0;
 
     // Setup Tx PDU
-    txPdu.txId = 0x123;  
+    txPdu.txId = 0x123;
     txPdu.rxId = 0x456;
-    txPdu.data = (uint8_t*)&txData;
+    txPdu.data = (uint8_t *)&txData;
     txPdu.len = sizeof(txData);
     txPdu.cantpState = CANTP_IDLE;
-    txPdu.blockSize = 0;        
+    txPdu.blockSize = 0;
     txPdu.separationTimeMin = 5;
 
     // Setup Rx PDU for responses
     rxPdu.txId = 0x456;
     rxPdu.rxId = 0x123;
-    rxPdu.data = (uint8_t*)&rxData;
+    rxPdu.data = (uint8_t *)&rxData;
     rxPdu.len = sizeof(rxData);
     rxPdu.cantpState = CANTP_IDLE;
     rxPdu.blockSize = 0;
     rxPdu.separationTimeMin = 0;
 }
 
-void loop() {
+void loop()
+{
     // Send a message every 1 second
-    if (millis() - lastSend >= 1) {
+    if (millis() - lastSend >= 100)
+    {
         lastSend = millis();
         txData.counter++;
-        txPdu.data = (uint8_t*)&txData;
+        txPdu.data = (uint8_t *)&txData;
         txPdu.len = sizeof(txData);
-        if (isoTpSender.send(&txPdu) == 0) {
+        if (isoTpSender.send(&txPdu) == 0)
+        {
             Serial.print("Sender: Sent counter = ");
             Serial.println(txData.counter);
-        } else {
+        }
+        else
+        {
             Serial.println("Sender: Error sending");
         }
 
+/*
         // Attempt to receive response
         int mCounter = 0;
-        while(true){
+        while (true)
+        {
             int result = isoTpSender.receive(&rxPdu);
-            if (result == 0 && rxPdu.cantpState == CANTP_END) {
+            if (result == 0 && rxPdu.cantpState == CANTP_END)
+            {
                 Serial.print("Sender: Received response counter = ");
                 Serial.println(rxData.counter);
                 break;
-            } else {
+            }
+            else
+            {
                 Serial.print("Sender: No response or error");
                 Serial.println(mCounter);
             }
             mCounter += 1;
-            if (mCounter > 10) break;
-        } 
-
+            if (mCounter > 10)
+                break;
+        }
+*/
     }
+        // receive data from receiver always
+        int result = isoTpSender.receive(&rxPdu);
+        if (result == 0 && rxPdu.cantpState == CANTP_END)
+        {
+            Serial.print("Sender: Received response counter = ");
+            Serial.println(rxData.counter);
+        }
+        else
+        {
+            Serial.print("Sender: No response or error");
+        }
 }
