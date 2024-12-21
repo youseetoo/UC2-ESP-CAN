@@ -62,7 +62,7 @@ void loop() {
         Serial.print("Receiver: Received counter = ");
         Serial.println(rxData.counter);
 
-        delay(100);
+        delay(10);
         // Prepare response
         txData.counter = rxData.counter + 100; // Just an example modification
         txPdu.data = (uint8_t*)&txData;
