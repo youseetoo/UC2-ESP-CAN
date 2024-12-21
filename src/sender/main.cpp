@@ -55,8 +55,8 @@ void setup()
     txPdu.separationTimeMin = 5;
 
     // Setup Rx PDU for responses
-    rxPdu.txId = 0x456;
-    rxPdu.rxId = 0x123;
+    rxPdu.txId = 0x456; // Receiver's ID
+    rxPdu.rxId = 0; // broadcast - listen to all ids; 0x123; // Sender's ID
     rxPdu.data = (uint8_t *)&rxData;
     rxPdu.len = sizeof(rxData);
     rxPdu.cantpState = CANTP_IDLE;
@@ -112,6 +112,8 @@ void loop()
         {
             Serial.print("Sender: Received response counter = ");
             Serial.println(rxData.counter);
+            Serial.print("Sender ID: ");
+            Serial.println(rxPdu.rxId);
         }
         else
         {

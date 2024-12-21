@@ -237,7 +237,12 @@ int CanIsoTp::receive(pdu_t *rxpdu)
         if (ESP32CanTwai.readFrame(&frame, TIMEOUT_READ))
         {
             log_i("Frame id received: %d, receive id: %d", frame.identifier, rxpdu->rxId);
-            if (frame.identifier == rxpdu->rxId)
+            // if 0 we accept all frames (i.e. broadcasting) - this we do by overwriting the rxId
+            if (rxpdu->rxId == 0)
+            {
+                rxpdu->rxId = frame.identifier;
+            }
+            if (frame.identifier == rxpdu->rxId) 
             {
                 log_i("Data length: %d", frame.data_length_code);
                 // Extract N_PCItype
