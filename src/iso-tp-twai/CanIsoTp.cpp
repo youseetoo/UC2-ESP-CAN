@@ -1,13 +1,13 @@
 #include "CanIsoTp.hpp"
-#define N_PCItypeSF 0x00  // Single Frame
-#define N_PCItypeFF 0x10  // First Frame
-#define N_PCItypeCF 0x20  // Consecutive Frame
-#define N_PCItypeFC 0x30  // Flow Control Frame
+#define N_PCItypeSF 0x00 // Single Frame
+#define N_PCItypeFF 0x10 // First Frame
+#define N_PCItypeCF 0x20 // Consecutive Frame
+#define N_PCItypeFC 0x30 // Flow Control Frame
 
-#define WFTmax 3            // Maximum number of wait frames
+#define WFTmax 3 // Maximum number of wait frames
 
-#define CANTP_FLOWSTATUS_CTS 0x00 // Continue to send
-#define CANTP_FLOWSTATUS_WT  0x01 // Wait
+#define CANTP_FLOWSTATUS_CTS 0x00  // Continue to send
+#define CANTP_FLOWSTATUS_WT 0x01   // Wait
 #define CANTP_FLOWSTATUS_OVFL 0x02 // Overflow
 
 #define PACKET_SIZE 8
@@ -16,7 +16,7 @@
 #define TIMEOUT_READ 100
 
 // Already declared in ESP32-TWAI-CAN.hpp
-/* 
+/*
 typedef struct {
     uint32_t txId;      // Transmit CAN ID
     uint32_t rxId;      // Receive CAN ID
@@ -30,24 +30,26 @@ typedef struct {
 } pdu_t;
 */
 
-
 // constructor
-CanIsoTp::CanIsoTp() {
+CanIsoTp::CanIsoTp()
+{
 }
-// destructor 
-CanIsoTp::~CanIsoTp() {
+// destructor
+CanIsoTp::~CanIsoTp()
+{
 }
 
-bool CanIsoTp::begin(long baudRate, int8_t txPin, int8_t rxPin){
+bool CanIsoTp::begin(long baudRate, int8_t txPin, int8_t rxPin)
+{
     ESP32CanTwai.setSpeed(ESP32Can.convertSpeed(baudRate));
     ESP32CanTwai.setPins(txPin, rxPin);
     return ESP32CanTwai.begin();
 }
 
-void CanIsoTp::end() {
+void CanIsoTp::end()
+{
     ESP32CanTwai.end();
 }
-
 
 int CanIsoTp::send(pdu_t *pdu)
 {
@@ -99,7 +101,6 @@ int CanIsoTp::send(pdu_t *pdu)
                 log_i("Timeout waiting for FC");
             }
             break;
-
 
         case CANTP_SEND_CF:
             // BS = 0 send everything.
@@ -155,8 +156,8 @@ int CanIsoTp::send(pdu_t *pdu)
                             pdu->cantpState = CANTP_IDLE;
                             bs = true;
                         }
-                    }                     // End if
-                }                         // End while
+                    } // End if
+                } // End while
                 if (pdu->len <= 7 && !bs) // Last block.
                 {
                     log_i("Last block");
@@ -206,8 +207,9 @@ int CanIsoTp::send(pdu_t *pdu)
                     }
                 }
             }
-            else{
-                //log_i("No frame received");
+            else
+            {
+                // log_i("No frame received");
             }
             // If no frame is received this iteration, loop continues until timeout or receive FC
         }
@@ -242,7 +244,7 @@ int CanIsoTp::receive(pdu_t *rxpdu)
             {
                 rxpdu->rxId = frame.identifier;
             }
-            if (frame.identifier == rxpdu->rxId) 
+            if (frame.identifier == rxpdu->rxId)
             {
                 log_i("Data length: %d", frame.data_length_code);
                 // Extract N_PCItype
@@ -256,15 +258,15 @@ int CanIsoTp::receive(pdu_t *rxpdu)
                         log_i("SF received");
                         ret = receive_SingleFrame(rxpdu, &frame);
                         break;
-                    case N_PCItypeFF:   // 0x10
+                    case N_PCItypeFF: // 0x10
                         log_i("FF received");
                         ret = receive_FirstFrame(rxpdu, &frame);
                         break;
-                    case N_PCItypeFC:   // 0x30
+                    case N_PCItypeFC: // 0x30
                         log_i("FC received");
                         ret = receive_FlowControlFrame(rxpdu, &frame);
                         break;
-                    case N_PCItypeCF:   // 0x20
+                    case N_PCItypeCF: // 0x20
                         log_i("CF received");
                         ret = receive_ConsecutiveFrame(rxpdu, &frame);
                         break;
@@ -314,12 +316,12 @@ int CanIsoTp::send_FirstFrame(pdu_t *pdu)
     frame.data_length_code = 8;
 
     frame.data[0] = N_PCItypeFF | ((pdu->len >> 8) & 0x0F); // PCI: First Frame (upper nibble is DL)
-    frame.data[1] = pdu->len & 0xFF;                       // Lower byte of data length
-    memcpy(&frame.data[2], pdu->data, 6);                  // Copy first 6 bytes of data
+    frame.data[1] = pdu->len & 0xFF;                        // Lower byte of data length
+    memcpy(&frame.data[2], pdu->data, 6);                   // Copy first 6 bytes of data
 
-    pdu->data += 6;  // Advance data pointer
-    pdu->len -= 6;   // Remaining data size
-    pdu->seqId = 1;  // Sequence ID for consecutive frames
+    pdu->data += 6; // Advance data pointer
+    pdu->len -= 6;  // Remaining data size
+    pdu->seqId = 1; // Sequence ID for consecutive frames
 
     return ESP32CanTwai.writeFrame(&frame) ? 0 : 1;
 }
@@ -333,7 +335,7 @@ int CanIsoTp::send_ConsecutiveFrame(pdu_t *pdu)
 
     frame.data[0] = N_PCItypeCF | (pdu->seqId & 0x0F); // PCI: Consecutive Frame with sequence number
     uint8_t sizeToSend = (pdu->len > 7) ? 7 : pdu->len;
-    log_i("Sending CF, len: %d, seqID: %d", sizeToSend, frame.data[0] & 0x0F);  
+    log_i("Sending CF, len: %d, seqID: %d", sizeToSend, frame.data[0] & 0x0F);
 
     memcpy(&frame.data[1], pdu->data, sizeToSend);
     pdu->data += sizeToSend;
@@ -352,8 +354,8 @@ int CanIsoTp::send_FlowControlFrame(pdu_t *pdu)
     frame.data_length_code = 3;
 
     frame.data[0] = N_PCItypeFC | CANTP_FLOWSTATUS_CTS; // PCI: Flow Control + CTS
-    frame.data[1] = pdu->blockSize;                    // Block Size
-    frame.data[2] = pdu->separationTimeMin;            // Separation Time
+    frame.data[1] = pdu->blockSize;                     // Block Size
+    frame.data[2] = pdu->separationTimeMin;             // Separation Time
 
     return ESP32CanTwai.writeFrame(&frame) ? 0 : 1;
 }
@@ -371,11 +373,35 @@ int CanIsoTp::receive_SingleFrame(pdu_t *pdu, CanFrame *frame)
 int CanIsoTp::receive_FirstFrame(pdu_t *pdu, CanFrame *frame)
 {
     log_i("First Frame received");
-    pdu->len = ((frame->data[0] & 0x0F) << 8) | frame->data[1];     // Extract total data length
-    memcpy(pdu->data, &frame->data[2], 6);                          // Copy first 6 bytes
-    pdu->seqId = 1;                                                 // Start sequence ID
-    pdu->cantpState = IsoTpState::CANTP_WAIT_DATA;                  // Awaiting consecutive frames               
+    // Determine total length from FF
+    uint16_t totalLen = ((frame->data[0] & 0x0F) << 8) | frame->data[1];
+    pdu->len = totalLen;
+
+    // introduce a special case where we don't know the datatype to cast on default, so we create the array and cast it later
+    if (pdu->data == nullptr)
+    {
+        // Free existing buffer if needed
+        if (pdu->data)
+        {
+            free(pdu->data);
+            pdu->data = nullptr;
+        }
+
+        // Allocate enough space for the entire payload and cast it later
+        pdu->data = (uint8_t *)malloc(totalLen);
+        if (!pdu->data)
+        {
+            // Could not allocate; set an error
+            pdu->cantpState = CANTP_ERROR;
+            return 1;
+        }
+    }
+    // Copy the first 6 bytes
+    memcpy(pdu->data, &frame->data[2], 6);         // Copy first 6 bytes
+    pdu->seqId = 1;                                // Start sequence ID
+    pdu->cantpState = IsoTpState::CANTP_WAIT_DATA; // Awaiting consecutive frames
     log_i("Sending FC");
+
     return send_FlowControlFrame(pdu);
 }
 
@@ -392,14 +418,18 @@ int CanIsoTp::receive_ConsecutiveFrame(pdu_t *pdu, CanFrame *frame)
     // Check sequence number to ensure correct order
     uint8_t seqId = frame->data[0] & 0x0F;
     log_i("Consecutive Frame received, state: %d and seqID (pdu) %d, seqID incoming: %d", pdu->cantpState, pdu->seqId, seqId);
-    if (seqId != pdu->seqId){
+    if (seqId != pdu->seqId)
+    {
         log_i("Sequence mismatch");
         return 1; // Sequence mismatch
     }
 
     // Determine how many bytes to copy
+    // Copy up to 7 bytes (or fewer if _rxRestBytes < 7)
     uint8_t sizeToCopy = (_rxRestBytes > 7) ? 7 : _rxRestBytes;
-    memcpy(pdu->data + 6 + (pdu->seqId - 1) * 7, &frame->data[1], sizeToCopy);
+    // Original offset logic: 6 + (seqId - 1)*7
+    uint16_t offset = 6 + (pdu->seqId - 1) * 7; 
+    memcpy(pdu->data + offset, &frame->data[1], sizeToCopy);
 
     // Decrease the remaining bytes count
     _rxRestBytes -= sizeToCopy;
@@ -411,7 +441,8 @@ int CanIsoTp::receive_ConsecutiveFrame(pdu_t *pdu, CanFrame *frame)
         log_i("All data received");
         pdu->cantpState = CANTP_END;
     }
-    else{
+    else
+    {
         // indicate how many bytes are left
         log_i("Bytes left: %d", _rxRestBytes);
     }
@@ -421,8 +452,6 @@ int CanIsoTp::receive_ConsecutiveFrame(pdu_t *pdu, CanFrame *frame)
 
     return 0;
 }
-
-
 
 int CanIsoTp::receive_FlowControlFrame(pdu_t *pdu, CanFrame *frame)
 {
@@ -476,4 +505,3 @@ int CanIsoTp::receive_FlowControlFrame(pdu_t *pdu, CanFrame *frame)
 
     return ret;
 }
-

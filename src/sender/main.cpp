@@ -32,6 +32,36 @@ pdu_t txPdu, rxPdu;
 
 unsigned long lastSend = 0;
 
+void dispatchIsoTpData(uint32_t id, const uint8_t* data, size_t size)
+{
+    switch (id)
+    {
+        case 0x123:
+        {
+            // Parse as SomeEngineData
+            MessageData engine;
+            if (size >= sizeof(engine)) {
+                memcpy(&engine, data, sizeof(engine));
+                // Do something with engine data
+                Serial.printf("Engine RPM: %u\n", engine.counter);
+            }
+            break;
+        }
+        case 0x456:
+        {
+            // Parse as SomeOtherData
+            break;
+        }
+        default:
+        {
+            // Unknown ID
+            Serial.println("Unknown message ID");
+            // Possibly dump raw bytes
+        }
+    }
+}
+
+
 void setup()
 {
     Serial.begin(115200);
@@ -84,14 +114,23 @@ void loop()
         }
     }
 
+    
     // receive data from receiver always
     int result = isoTpSender.receive(&rxPdu);
     if (result == 0 && rxPdu.cantpState == CANTP_END)
     {
+        /*
         Serial.print("Sender: Received response counter = ");
         Serial.println(rxData.counter);
         Serial.print("Sender ID: ");
         Serial.println(rxPdu.rxId);
+            // Dispatch by ID
+            */
+        dispatchIsoTpData(rxPdu.rxId, rxPdu.data, rxPdu.len);
+
+        // Free the data once done
+        // free(rxPdu->data); // will be done inside the receive function
+        
     }
     else
     {
