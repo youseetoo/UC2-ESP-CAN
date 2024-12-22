@@ -56,7 +56,7 @@ void setup()
 
     // Setup Rx PDU for responses
     rxPdu.txId = 0x456; // Receiver's ID
-    rxPdu.rxId = 0; // broadcast - listen to all ids; 0x123; // Sender's ID
+    rxPdu.rxId = 0;     // broadcast - listen to all ids; 0x123; // Sender's ID
     rxPdu.data = (uint8_t *)&rxData;
     rxPdu.len = sizeof(rxData);
     rxPdu.cantpState = CANTP_IDLE;
@@ -82,41 +82,19 @@ void loop()
         {
             Serial.println("Sender: Error sending");
         }
-
-/*
-        // Attempt to receive response
-        int mCounter = 0;
-        while (true)
-        {
-            int result = isoTpSender.receive(&rxPdu);
-            if (result == 0 && rxPdu.cantpState == CANTP_END)
-            {
-                Serial.print("Sender: Received response counter = ");
-                Serial.println(rxData.counter);
-                break;
-            }
-            else
-            {
-                Serial.print("Sender: No response or error");
-                Serial.println(mCounter);
-            }
-            mCounter += 1;
-            if (mCounter > 10)
-                break;
-        }
-*/
     }
-        // receive data from receiver always
-        int result = isoTpSender.receive(&rxPdu);
-        if (result == 0 && rxPdu.cantpState == CANTP_END)
-        {
-            Serial.print("Sender: Received response counter = ");
-            Serial.println(rxData.counter);
-            Serial.print("Sender ID: ");
-            Serial.println(rxPdu.rxId);
-        }
-        else
-        {
-            Serial.print("Sender: No response or error");
-        }
+
+    // receive data from receiver always
+    int result = isoTpSender.receive(&rxPdu);
+    if (result == 0 && rxPdu.cantpState == CANTP_END)
+    {
+        Serial.print("Sender: Received response counter = ");
+        Serial.println(rxData.counter);
+        Serial.print("Sender ID: ");
+        Serial.println(rxPdu.rxId);
+    }
+    else
+    {
+        Serial.print("Sender: No response or error");
+    }
 }
