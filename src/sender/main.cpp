@@ -87,8 +87,8 @@ void setup()
     // Setup Rx PDU for responses
     rxPdu.txId = 0x456; // Receiver's ID
     rxPdu.rxId = 0;     // broadcast - listen to all ids; 0x123; // Sender's ID
-    rxPdu.data = (uint8_t *)&rxData;
-    rxPdu.len = sizeof(rxData);
+    rxPdu.data = nullptr; // nullptr indicates that we will parse the data laster; size will be dicated by FC frame (uint8_t *)&rxData;
+    rxPdu.len = 0; //       sizeof(rxData);
     rxPdu.cantpState = CANTP_IDLE;
     rxPdu.blockSize = 0;
     rxPdu.separationTimeMin = 0;
@@ -97,7 +97,7 @@ void setup()
 void loop()
 {
     // Send a message every 1 second
-    if (millis() - lastSend >= 100)
+    if (millis() - lastSend >= 10)
     {
         lastSend = millis();
         txData.counter++;
